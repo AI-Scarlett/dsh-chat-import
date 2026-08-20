@@ -264,7 +264,7 @@ lib/
 
 ## ⚙️ 兼容性
 
-面向 `dsh 0.1.x` 线（`dsh-tools ^0.1.0-rc.6`，实测 `dsh 0.1.0-rc.6`），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 391 个用例。
+面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，实测 `dsh 0.1.0-rc.8`），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 391 个用例。
 
 ---
 

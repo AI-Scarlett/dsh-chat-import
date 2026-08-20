@@ -264,7 +264,7 @@ lib/
 
 ## ⚙️ Compatibility
 
-Targets the `dsh 0.1.x` line (`dsh-tools ^0.1.0-rc.6`, tested on `dsh 0.1.0-rc.6`) and requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). `npm test` — 391 cases.
+Targets the `dsh 0.1.x` line (`dsh-tools >=0.1.0-rc.8 <0.2.0`, tested on `dsh 0.1.0-rc.8`) and requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). `npm test` — 391 cases.
 
 ---
 
