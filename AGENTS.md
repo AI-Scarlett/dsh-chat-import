@@ -21,7 +21,7 @@ lib/             导入/同步驱动（按职责拆分，均消费 ctx、非纯�
                  retract.mjs（REQ-33 识别/撤回）、discovery-host.mjs（scan_discover host 适配）、
                  panel.mjs（REQ-41 面板路由）、sync-config.mjs / sync-loop.mjs / sync-panel.mjs
                  （双向增量：入站巡检 + DSH→Claude/Codex/Grok 写出 + 控制台路由）、
-                 client.js（Browser 侧 bundle，REQ-41：sidebar.footer.action
+                 client.js（Browser 侧 bundle，REQ-41：settings.section
                  槽 → 按工作区分组的面板 + 单选/多选导入；文案注册到 "chat-import" ns 经
                  @deepseek-ai/dsh-client-locale 随 web 语言切换，缺失时降级内置 zh）、command.mjs
                  （REQ-42 /import 命令面：commands 可选服务延迟注册，复用 importDiscoveryItem）、
@@ -54,7 +54,7 @@ npm test        # node --test 跑 test/*.test.mjs（convert 单测 + export 单�
 npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/check-linux-compat.mjs，CI 同款护栏）
 ```
 
-无构建步骤：纯 ESM，`index.mjs` / `convert.mjs` / `export.mjs` / `lib/` 即发布产物（`lib/client.js` 是手写 CJS bundle，亦无构建）。DSH 手工验证：`dsh plugin --profile web add -w link:<本仓库路径>` 后重启 dsh，在会话里调任一 `import_*`（15 个）/ `scan_discover` / `export_claude` / `sync_to_claude` / `list_imported_sessions` / `retract_import`；Browser 侧验证：dsh web 侧边栏底部「导入会话」按钮 → 面板按工作区分组浏览 + 单选/多选导入。
+无构建步骤：纯 ESM，`index.mjs` / `convert.mjs` / `export.mjs` / `lib/` 即发布产物（`lib/client.js` 是手写 CJS bundle，亦无构建）。DSH 手工验证：`dsh plugin --profile web add -w link:<本仓库路径>` 后重启 dsh，在会话里调任一 `import_*`（15 个）/ `scan_discover` / `export_claude` / `sync_to_claude` / `list_imported_sessions` / `retract_import`；Browser 侧验证：dsh web「设置」中的「导入会话」分区 → 按工作区分组浏览 + 单选/多选导入。
 
 ## 提交纪律（保持仓库干净）
 
@@ -93,7 +93,7 @@ npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/chec
 
 ## DSH 插件约束
 
-- **只消费 host 公开服务**：`sessionPersistence`（create + append 落盘；list + readFrom 供 `export_claude` / `sync_to_claude` 只读）、`fs`、`tools`、`webServer`（REQ-41 面板 JSON 路由）、`workspaceRegistry`；`agentDefaultModel` / `llm`（REQ-37 预算自适应）可选，经 `ctx.get` 读取、缺失或抛错即回退。opencode / zcode / hermes 用 `node:sqlite`（`DatabaseSync`，host 面）。不发布服务 → 无需 isolate realm。**有 Browser 侧**（REQ-41 已定案选 Browser 入口：`lib/client.js` 手写 CJS bundle 注册到 `sidebar.footer.action` 槽，`package.json` 声明 `dsh.client` + peer `react` / `@deepseek-ai/dsh-client-locale`，`files` 含 `lib/client.js`；面板只消费 host JSON 路由，不 import DSH host 模块）。
+- **只消费 host 公开服务**：`sessionPersistence`（create + append 落盘；list + readFrom 供 `export_claude` / `sync_to_claude` 只读）、`fs`、`tools`、`webServer`（REQ-41 面板 JSON 路由）、`workspaceRegistry`；`agentDefaultModel` / `llm`（REQ-37 预算自适应）可选，经 `ctx.get` 读取、缺失或抛错即回退。opencode / zcode / hermes 用 `node:sqlite`（`DatabaseSync`，host 面）。不发布服务 → 无需 isolate realm。**有 Browser 侧**（REQ-41 使用 rc.8 公开的 `settings.section` 槽：`lib/client.js` 手写 CJS bundle，`package.json` 声明 `dsh.client` + peer `react` / client runtime / settings / locale，`files` 含 `lib/client.js`；面板只消费 host JSON 路由，不 import DSH host 模块）。
 - **插件，不是引擎改动**：新行为走公开扩展点（工具注册）；绝不修改 DSH 引擎 / apiproxy / 官方 UI 包。
 - **会话日志 append-only、deep-frozen**：只 `create` + `append`，绝不改写历史事件。
 - **模型可见 ⟺ 落盘**：进入模型上下文的任何内容必须能从会话日志重建；新模型可见输入必须对应会话事件。

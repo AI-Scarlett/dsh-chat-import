@@ -71,6 +71,11 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
 
 ### Changed
 
+- **DSH rc.8 Settings entry (0.3.3)** — removes the sidebar footer button and
+  registers one `settings.section` named **导入会话**. rc.8 does not expose a
+  supported slot after the Settings button, so this is the approved fallback;
+  no official DOM or DSH package is modified.
+
 - **Bounded rc.8 outbound sync** — automatic writeback now uses
   `sessionPersistence.listSnapshots()` and persists each target's opaque source
   revision. Unchanged sessions skip `readFrom()` entirely; first-run / changed

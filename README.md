@@ -206,9 +206,9 @@ sync_to_claude({ sessionId: "import-019f5f27-…" })
 sync_to_claude({ sessionId: "…", target: "copy", dryRun: true })
 ```
 
-### Browser panel — discover & import from the sidebar
+### Browser panel — discover & import from Settings
 
-The dsh web sidebar shows a compact, icon-only **导入会话** button through rc.8's public `sidebar.footer.action` list slot. It uses no fixed overlay, DOM probing or replacement of the official `sidebar.settings` seat. The current rc.8 shell renders footer actions immediately **above** Settings; an exact after-Settings position needs a future public slot from DSH. The button opens a panel listing discovered sessions **grouped by workspace folder** (each source's `cwd`/project when available, otherwise an "(未分组)" bucket), with a source filter — "全部来源" scans every format's default data root, a single source restricts the view — and a per-session import-status badge (已导入 / 部分 / 未导入). A search box filters by title / workspace / path, and the list is **paginated** (50 per page) with selections kept across pages for bulk operations. The panel closes on `Escape`.
+DSH rc.8 has no supported slot after the sidebar Settings button, so the safe fallback places **导入会话** in Settings through the public `settings.section` slot. It uses no DOM probing, overlay trigger, or replacement of the official `sidebar.settings` seat. The section lists discovered sessions **grouped by workspace folder** (each source's `cwd`/project when available, otherwise an "(未分组)" bucket), with a source filter — "全部来源" scans every format's default data root, a single source restricts the view — and a per-session import-status badge (已导入 / 部分 / 未导入). A search box filters by title / workspace / path, and the list is **paginated** (50 per page) with selections kept across pages for bulk operations.
 
 Each row supports **single import**, and the checkboxes enable **multi-select import** ("导入所选 (N)"): the panel calls the same host import pipeline as the `import_*` tools, so idempotent skip / incremental append / `force` / context-budget semantics are identical, and the list refreshes with the new statuses after importing. A multi-session source (e.g. `conversations.json`, an opencode/zcode/hermes DB) is imported whole — opencode/zcode restrict to the selected `sessionId`s.
 
