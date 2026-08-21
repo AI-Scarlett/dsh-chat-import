@@ -1,7 +1,7 @@
 {
   "name": "dsh-chat-import",
   "description": "Import Claude Code / Codex / ChatGPT / Cursor / Gemini / Reasonix / Pi Coding Agent / opencode / ZCode / Grok Build / OpenClaw / Hermes / Kimi CLI conversation histories as resumable DeepSeek Harness sessions",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "main": "./index.mjs",
   "exports": {

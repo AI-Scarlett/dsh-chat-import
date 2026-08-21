@@ -7,7 +7,13 @@ import { join } from 'node:path'
 import { serializeCodexJsonl } from '../lib/export/codex.mjs'
 import { serializeGrokbuildJsonl, buildGrokSummary } from '../lib/export/grokbuild.mjs'
 import { convertCodexJsonl, convertGrokbuildJson } from '../convert.mjs'
-import { loadSyncConfig, saveSyncConfig, DEFAULT_INTERVAL_MS } from '../lib/sync-config.mjs'
+import {
+  loadSyncConfig,
+  saveSyncConfig,
+  saveOutboundMap,
+  DEFAULT_INTERVAL_MS,
+  DEFAULT_MAX_SESSIONS_PER_RUN,
+} from '../lib/sync-config.mjs'
 import { runSyncOnce, stopSyncTimer } from '../lib/sync-loop.mjs'
 import { registerSyncRoutes } from '../lib/sync-panel.mjs'
 import { clearScanCache } from '../lib/discovery.mjs'
@@ -47,10 +53,12 @@ test('sync 配置默认关闭，保存后能读回开关', async () => {
   assert.equal(fresh.inbound.enabled, false)
   assert.equal(fresh.outbound.enabled, false)
   assert.equal(fresh.intervalMs, DEFAULT_INTERVAL_MS)
+  assert.equal(fresh.maxSessionsPerRun, DEFAULT_MAX_SESSIONS_PER_RUN)
   const saved = await saveSyncConfig(dir, {
     inbound: { enabled: true, formats: ['claude'] },
     outbound: { enabled: true, targets: ['codex', 'grokbuild'] },
     intervalMs: 30_000,
+    maxSessionsPerRun: 7,
   })
   assert.equal(saved.inbound.enabled, true)
   assert.deepEqual(saved.inbound.formats, ['claude'])
@@ -58,6 +66,7 @@ test('sync 配置默认关闭，保存后能读回开关', async () => {
   const again = await loadSyncConfig(dir)
   assert.equal(again.inbound.enabled, true)
   assert.equal(again.intervalMs, 30_000)
+  assert.equal(again.maxSessionsPerRun, 7)
 })
 
 test('Codex 往返：DSH 事件 → rollout JSONL → convertCodexJsonl 保住用户轮', () => {
@@ -94,8 +103,16 @@ test('Grok 往返：DSH 事件 → chat_history + summary → convertGrokbuildJs
 
 function makeRealCtx(root) {
   const sessions = new Map()
+  const metrics = { listSnapshots: 0, readFrom: 0 }
   const persistence = {
     async list() { return [...sessions.values()].map((s) => s.meta) },
+    async listSnapshots() {
+      metrics.listSnapshots++
+      return [...sessions.values()].map((s) => ({
+        header: s.meta,
+        revision: 'memory:' + s.meta.id + ':' + s.events.length,
+      }))
+    },
     async create(meta) { sessions.set(meta.id, { meta, events: [] }) },
     async append(id, events) {
       const s = sessions.get(id)
@@ -103,6 +120,7 @@ function makeRealCtx(root) {
     },
     async inspect(id) { return sessions.get(id) },
     async readFrom(id, fromSeq = 0) {
+      metrics.readFrom++
       const s = sessions.get(id)
       return { meta: s.meta, events: s.events.slice(fromSeq) }
     },
@@ -165,7 +183,7 @@ function makeRealCtx(root) {
     on() { return () => {} },
     effect() { return () => {} },
   }
-  return { ctx, persistence, sessions, webRoutes, root }
+  return { ctx, persistence, sessions, webRoutes, metrics, root }
 }
 
 test('入站巡检：未导入 Claude 文件 → imported，再跑一轮 → skipped', async () => {
@@ -208,6 +226,7 @@ test('出站写回：原生 DSH 会话落到 Codex 副本，再增量追加', as
   const first = await runSyncOnce(ctx, registryDir)
   assert.equal(first.ok, true)
   assert.equal(first.outbound.synced, 1)
+  assert.equal(first.outbound.mapWrites, 1)
   const mapping = JSON.parse(readFileSync(join(registryDir, 'outbound.json'), 'utf8'))
   const filePath = mapping.mappings['native-sync'].codex.filePath
   assert.ok(existsSync(filePath))
@@ -227,9 +246,61 @@ test('出站写回：原生 DSH 会话落到 Codex 副本，再增量追加', as
   ])
   const second = await runSyncOnce(ctx, registryDir)
   assert.equal(second.outbound.synced, 1)
+  assert.equal(second.outbound.mapWrites, 1)
   const nextText = readFileSync(filePath, 'utf8')
   assert.match(nextText, /第二问/)
   assert.ok(nextText.length > firstText.length)
+})
+
+test('rc.8 revision：723 个未变化会话不读取完整日志，也不重写映射', async () => {
+  const home = process.env.DSH_HOME
+  const { ctx, persistence, metrics } = makeRealCtx(home)
+  const mappings = {}
+  for (let i = 0; i < 723; i++) {
+    const id = 'stable-' + i
+    await persistence.create({ id, createdAt: 1_700_000_000_000 + i, cwd: join(home, 'proj') })
+    mappings[id] = { codex: { sourceRevision: 'memory:' + id + ':0', filePath: join(home, 'out', id + '.jsonl') } }
+  }
+  const registryDir = join(home, 'dsh-chat-import')
+  await saveOutboundMap(registryDir, { mappings })
+  await saveSyncConfig(registryDir, {
+    inbound: { enabled: false, formats: ['claude'] },
+    outbound: { enabled: true, targets: ['codex'] },
+  })
+
+  const result = await runSyncOnce(ctx, registryDir)
+  assert.equal(result.ok, true)
+  assert.equal(result.outbound.sessions, 723)
+  assert.equal(result.outbound.candidates, 0)
+  assert.equal(result.outbound.processed, 0)
+  assert.equal(result.outbound.unchanged, 723)
+  assert.equal(result.outbound.mapWrites, 0)
+  assert.equal(metrics.readFrom, 0)
+})
+
+test('首次 revision 迁移每轮最多处理 25 个会话，剩余会话延后', async () => {
+  const home = process.env.DSH_HOME
+  const { ctx, persistence, metrics } = makeRealCtx(home)
+  for (let i = 0; i < 30; i++) {
+    const id = 'bootstrap-' + i
+    await persistence.create({ id, createdAt: 1_700_000_000_000 + i, cwd: join(home, 'proj') })
+    await persistence.append(id, sampleEvents())
+  }
+  const registryDir = join(home, 'dsh-chat-import')
+  await saveSyncConfig(registryDir, {
+    inbound: { enabled: false, formats: ['claude'] },
+    outbound: { enabled: true, targets: ['codex'] },
+  })
+
+  const result = await runSyncOnce(ctx, registryDir, { dryRun: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.outbound.sessions, 30)
+  assert.equal(result.outbound.candidates, 30)
+  assert.equal(result.outbound.processed, DEFAULT_MAX_SESSIONS_PER_RUN)
+  assert.equal(result.outbound.deferred, 5)
+  assert.equal(result.outbound.mapWrites, 0)
+  assert.equal(metrics.readFrom, DEFAULT_MAX_SESSIONS_PER_RUN)
+  assert.equal(existsSync(join(registryDir, 'outbound.json')), false)
 })
 
 test('/api-import/sync GET 返回默认关闭状态', async () => {
@@ -249,4 +320,5 @@ test('/api-import/sync GET 返回默认关闭状态', async () => {
   assert.equal(data.ok, true)
   assert.equal(data.config.inbound.enabled, false)
   assert.equal(data.config.outbound.enabled, false)
+  assert.equal(data.config.maxSessionsPerRun, DEFAULT_MAX_SESSIONS_PER_RUN)
 })

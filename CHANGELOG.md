@@ -69,6 +69,21 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
   to the built-in zh dictionary (previous behavior). The bilingual README
   tagline is corrected to 12 sources.
 
+### Changed
+
+- **Bounded rc.8 outbound sync** — automatic writeback now uses
+  `sessionPersistence.listSnapshots()` and persists each target's opaque source
+  revision. Unchanged sessions skip `readFrom()` entirely; first-run / changed
+  sessions are capped at 25 per cycle by default (configurable from 1–500), and
+  all mapping changes are committed to `outbound.json` in one atomic write per
+  cycle instead of one read/write transaction per session.
+- **Compact official-slot sidebar entry** — the import panel trigger is now an
+  icon-only `sidebar.footer.action` entry ordered after other footer actions.
+  The old fixed overlay, Cordis badge DOM query and `MutationObserver` were
+  removed. The plugin does not replace `sidebar.settings`; rc.8 currently
+  renders its public footer-action slot immediately above Settings, and exposes
+  no supported after-Settings slot.
+
 ### Fixed
 
 - **Archived imported sessions can be re-imported (REQ-55)** — previously the

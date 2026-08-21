@@ -105,6 +105,7 @@ import_claude({ path: "~/.claude/projects" })
 - **外部 → DSH**：按间隔巡检 Claude / Codex / Grok 的新增或增长会话，走既有幂等续写。
 - **DSH → 外部**：把 DSH 新增完整轮次写回对应 agent。导入源追加到原文件；原生 DSH 会话在该 agent 默认根下落一份副本。
 - 两个方向**默认关闭**，必须在面板里打开开关，或点「立即同步」。配置在 `$DSH_HOME/dsh-chat-import/sync.json`。
+- 在 rc.8 上，出站同步先比较轻量的 `sessionPersistence.listSnapshots()` revision，再决定是否读取日志：未变化会话零完整读取；首次迁移 / 变化会话默认每轮最多处理 **25 个**（面板可配 1–500），`outbound.json` 每轮只原子提交一次。
 
 <details>
 <summary><b>卸载</b></summary>
@@ -207,7 +208,7 @@ sync_to_claude({ sessionId: "…", target: "copy", dryRun: true })
 
 ### 浏览器面板 — 侧边栏发现与导入
 
-dsh web 侧边栏底部上方有一个「导入会话」浮动胶囊（`sidebar.footer.action` 槽条目以 fixed 浮层渲染，同槽其它条目——如官方 Cordis 徽标占满整个 footer 行——不会把它挤出或挡住）。打开的面板**按工作区文件夹分组**列出发现的会话（各来源记录里的 `cwd`/项目名，缺省归入「(未分组)」），支持来源过滤——「全部来源」扫描全部格式的默认数据根，单选来源则只看该格式——并带逐会话导入状态徽标（已导入 / 部分 / 未导入）。搜索框按标题 / 工作区 / 路径过滤，列表**分页**展示（每页 50 条），跨页选择保留便于批量操作。面板支持 `Esc` 关闭。
+dsh web 侧边栏通过 rc.8 公开的 `sidebar.footer.action` 列表槽展示一个紧凑、纯图标的「导入会话」小按钮；不再使用 fixed 浮层、DOM 探测，也不覆盖官方 `sidebar.settings` 席位。rc.8 当前把 footer actions 渲染在「设置」**正上方**；若要精确放到设置之后，需要 DSH 上游提供新的公开 Slot。按钮打开的面板**按工作区文件夹分组**列出发现的会话（各来源记录里的 `cwd`/项目名，缺省归入「(未分组)」），支持来源过滤——「全部来源」扫描全部格式的默认数据根，单选来源则只看该格式——并带逐会话导入状态徽标（已导入 / 部分 / 未导入）。搜索框按标题 / 工作区 / 路径过滤，列表**分页**展示（每页 50 条），跨页选择保留便于批量操作。面板支持 `Esc` 关闭。
 
 每行支持**单选导入**，复选框支持**多选导入**（「导入所选 (N)」）：面板调用与 `import_*` 工具完全相同的 host 导入管线，幂等跳过 / 增量续写 / force / 上下文预算语义完全一致；导入后自动刷新列表展示最新状态。多会话源（如 `conversations.json`、opencode/zcode/hermes 库）整源导入——opencode/zcode 只导所选 `sessionId`。
 
@@ -264,7 +265,7 @@ lib/
 
 ## ⚙️ 兼容性
 
-面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，实测 `dsh 0.1.0-rc.8`），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 391 个用例。
+面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，实测 `dsh 0.1.0-rc.8`），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 414 个用例。
 
 ---
 
