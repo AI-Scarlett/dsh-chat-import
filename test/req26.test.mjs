@@ -22,14 +22,14 @@ beforeEach(() => {
   process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'dsh-home-'))
 })
 
-const SECRET = 'sk-abc123456789012345'
+const SECRET = 'sk-' + 'x'.repeat(24)
 
 // ── detectSecretKinds：保守正则命中清单 ────────────────────────────────────
 
 test('detectSecretKinds: 命中 api-key / token / password / secret / authorization', () => {
   assert.deepEqual(detectSecretKinds('use ' + SECRET + ' now'), ['api-key'])
   assert.deepEqual(detectSecretKinds('{"x":"api_key=abc12345"}'), ['api-key'])
-  assert.deepEqual(detectSecretKinds('ghp_abcdefghijklmnopqrstuvwxyz123456'), ['token'])
+  assert.deepEqual(detectSecretKinds('ghp_' + 'y'.repeat(32)), ['token'])
   assert.deepEqual(detectSecretKinds('token=abc12345'), ['token'])
   assert.deepEqual(detectSecretKinds('"token": "abc12345"'), ['token'])
   assert.deepEqual(detectSecretKinds('password=hunter2'), ['password'])

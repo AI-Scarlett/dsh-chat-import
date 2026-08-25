@@ -303,7 +303,7 @@ lib/
 
 ## ⚙️ 兼容性
 
-面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，源码 / 隔离组合已在 `dsh 0.1.1-rc.2` 检查），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 420 个用例。
+声明 `dsh >=0.1.0-rc.8 <0.2.0` 与 `dsh-tools >=0.1.0-rc.8 <0.2.0`：`rc.7` 不兼容，`rc.8`、`0.1.1-rc.1` 和 `0.1.1-rc.2` 为兼容声明。`dsh-tools` 契约已在 `dsh 0.1.1-rc.2` 上检查，需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。这些是源码兼容契约；逐版本的真实 Profile 安装、启动、卸载和回滚证据由 DSH STORE 单独记录。`npm test` — 420 个用例。
 
 ---
 
