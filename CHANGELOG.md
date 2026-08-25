@@ -13,11 +13,23 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
 
 ### Added
 
-- **Two-way incremental sync control panel** — sidebar panel gains a Sync tab
+- **Same-project session sharing (0.4.0)** — two read-only model tools replace
+  full transcript copying as the primary handoff path. `project_sessions_list`
+  uses the current DSH session's canonical `cwd` to find exact-project Codex,
+  Claude Code and DSH sessions and returns only short-lived opaque locators.
+  `project_session_read` revalidates the source id and project, streams the
+  selected source with a 64 MiB scan cap, and returns at most 24 user/assistant
+  messages / 24,000 characters. Reasoning, tool results and injected context
+  are excluded; common credential shapes are redacted. Source paths and full
+  transcripts never enter the model result, and no DSH session copy is created.
+
+- **Legacy two-way incremental sync control panel** — Settings gains a Legacy Sync tab
   (`GET/POST /api-import/sync`). Optional inbound watch (Claude / Codex / Grok
   new or grown sessions → DSH append) and outbound writeback (DSH complete
-  turns → Claude source file, or Codex / Grok copies). Both directions default
-  **off**; a timer starts only after the user enables a switch. Outbound
+  turns → Claude source file, or Codex / Grok copies). Manual **Sync now**
+  remains available. A periodic timer now also requires the explicit Host opt-in
+  `DSH_CHAT_IMPORT_LEGACY_SYNC=1`, so a persisted older `enabled: true` config
+  cannot silently restart background scans after upgrading. Outbound
   copies for native DSH sessions are tracked in `outbound.json` so inbound
   scans skip them (no echo loop).
 
@@ -70,6 +82,17 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
   tagline is corrected to 12 sources.
 
 ### Changed
+
+- **Reference instead of copy by default (0.4.0)** — full `import_*`, export and
+  sync capabilities remain available for explicit migration workflows, while
+  same-project continuation uses metadata-only listing and one bounded,
+  on-demand read. The Settings UI labels copy/sync operations as legacy and
+  points users to the project-sharing flow.
+
+- **Zero-I/O session-start hint (0.4.0)** — replaces the old startup discovery
+  scan and `hints.json` write with one small scoped instruction that tells the
+  model to prefer project sharing. External roots are touched only after an
+  explicit `project_sessions_list` call.
 
 - **DSH rc.8 Settings entry (0.3.3)** — removes the sidebar footer button and
   registers one `settings.section` named **导入会话**. rc.8 does not expose a

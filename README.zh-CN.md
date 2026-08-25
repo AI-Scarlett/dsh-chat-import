@@ -2,9 +2,9 @@
 
 # 📥 DSH Chat Import
 
-**把 14 种外部 Agent 聊天历史全保真导入 DeepSeek Harness 为可继续（resume）会话——并可导出 / 同步回 Claude Code。**
+**在 Codex、Claude Code 和 DSH 之间继续同一个项目，不再复制完整会话历史。**
 
-本公开 fork（[AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/dsh-chat-import)）增加了 Claude / Codex / Grok 双向增量同步与 Web 控制面板。上游：[Nwflower/dsh-chat-import](https://github.com/Nwflower/dsh-chat-import)。
+v0.4 的主路径是只读的“同项目会话共享 + 按需有界上下文”。完整导入、导出与同步仍作为旧版迁移工具保留。本公开 fork：[AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/dsh-chat-import)；上游：[Nwflower/dsh-chat-import](https://github.com/Nwflower/dsh-chat-import)。
 
 [![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](README.md)
 [![简体中文](https://img.shields.io/badge/Language-简体中文-blue?style=for-the-badge)](#)
@@ -23,7 +23,7 @@
 
 </div>
 
-> **一个插件，14 种来源** —— 全保真导入 DeepSeek Harness，无缝续聊，并可导出 / 同步回 Claude Code。
+> **一个项目，多个 Agent** —— 在 Codex 做到一半，让 DSH 只读取必要交接上下文后继续。
 
 <div align="center">
 
@@ -37,7 +37,11 @@
 
 ## 💡 概念
 
-`dsh-chat-import` 从 **Claude Code、Codex、ChatGPT、Cursor、Gemini、Reasonix、opencode、ZCode、Grok Build、OpenClaw、Pi Coding Agent、Hermes、Kimi CLI 与 DSH 会话日志** 导入聊天历史——工具调用、思考过程一应俱全——成为**全保真、可继续（resume）的 DeepSeek Harness 会话**。源文件**只读**读取（绝不改写），不碰 DSH 引擎；每次导入都成为一条全新会话，并按源 `cwd` 归入对应工作区。
+`dsh-chat-import` 现在默认把外部历史当作**项目级只读引用**，而不是需要复制的数据。在 DSH 会话中，`project_sessions_list` 用当前会话的规范 `cwd` 精确匹配同项目的 Codex、Claude Code 和其他 DSH 会话；`project_session_read` 再流式读取被选中的一个源，只返回有界的 user/assistant 片段。推理、工具结果、系统注入不会进入交接上下文，常见凭据形态会脱敏，源路径不会暴露给模型。
+
+插件不会把完整 transcript 新建为 DSH 副本；只有当次交接真正返回的有界工具结果会进入当前 DSH 日志，以保证上下文可重放。locator 不透明、绑定项目、只在进程内存中存在，10 分钟过期；该主路径没有周期扫描。
+
+真正需要持久副本时，原有迁移路径仍可把 **Claude Code、Codex、ChatGPT、Cursor、Gemini、Reasonix、opencode、ZCode、Grok Build、OpenClaw、Pi Coding Agent、Hermes、Kimi CLI 与 DSH 会话日志** 导入为全保真 DSH 会话；旧版导入仍只读源文件。
 
 反向方向同样覆盖：`export_claude` 把 DSH 会话序列化回 Claude Code JSONL（只读——绝不修改你的 DSH 日志），Claude Code 可用 `--resume` 加载续聊；`sync_to_claude` 再把会话新增轮次增量写回 Claude Code 文件——带守卫、绝不静默覆盖。
 
@@ -47,6 +51,10 @@
 
 | 分类 | 特性 | 说明 |
 | --- | --- | --- |
+| 共享 | **精确的同项目匹配** | 用 Host 文件系统对当前 DSH `cwd` 产生的规范身份比较；只是目录名相同不算同项目。 |
+| 共享 | **按需、有界上下文** | 先列元数据，再流式读取选中会话；最多扫描 64 MiB，最多返回 24 条 / 24,000 字符。 |
+| 共享 | **不复制 transcript** | 源保持权威；DSH 只持久化本次真正返回给模型的有界片段。 |
+| 共享 | **安全交接面** | 只取 user/assistant 文本，排除工具结果、推理和注入上下文，并脱敏常见密钥形态。 |
 | 导入 | **14 种来源 + 本地 JSONL，一个插件** | 每种来源一条命令——从 Claude Code JSONL、Codex rollout 到 SQLite 数据库与会话目录。 |
 | 导入 | **全保真** | 工具调用与结果、思考块、标题、模型与时间戳，源有记录就原样保留。 |
 | 导入 | **批量导入** | 指向一个目录（或整个数据库），每个文件 / 每段对话都成为独立会话，并返回逐文件汇总。 |
@@ -92,19 +100,34 @@ dsh plugin --profile web add dsh-chat-import                    # npm 包
 dsh plugin --profile web add -w link:/path/to/dsh-chat-import   # 本地源码（符号链接）
 ```
 
-**2. 导入** — 在任意 DSH 会话里导入单个文件或整个目录（15 个导入工具调用方式一致——见上方来源表）：
+**2. 跨 Agent 继续同一项目** —— 在 DSH 中打开与 Codex / Claude 会话相同的项目，然后直接说：
+
+```text
+继续这个项目里 Codex 还没完成的任务，先查找同项目会话。
+```
+
+DSH 可直接调用两个只读工具：
+
+```text
+project_sessions_list({ sources: ["codex", "claude", "dsh"] })
+project_session_read({ locator: "<上一步返回的 locator>", messageLimit: 12 })
+```
+
+模型无需也不能传入任意项目路径；两个调用都绑定当前 DSH 会话的项目。
+
+**3. 可选的旧版导入** —— 只在确实需要持久完整副本时，导入单个文件或整个目录（15 个导入工具调用方式一致）：
 
 ```
 import_claude({ path: "~/.claude/projects" })
 ```
 
-**3. 续聊** — 刷新一次会话列表，打开导入的会话，继续对话——它会从源记录停下的地方无缝接上。
+旧版导入后刷新会话列表，再打开这条副本续聊。
 
-**4. 双向增量同步（本机二次开发）** — 侧边栏「导入会话」面板新增 **同步** 页：
+**4. 可选的旧版双向同步** —— 「设置 → 项目会话」中保留 **旧版同步** 页：
 
 - **外部 → DSH**：按间隔巡检 Claude / Codex / Grok 的新增或增长会话，走既有幂等续写。
 - **DSH → 外部**：把 DSH 新增完整轮次写回对应 agent。导入源追加到原文件；原生 DSH 会话在该 agent 默认根下落一份副本。
-- 两个方向**默认关闭**，必须在面板里打开开关，或点「立即同步」。配置在 `$DSH_HOME/dsh-chat-import/sync.json`。
+- **v0.4 默认停用周期同步，即使旧配置还是 `enabled: true` 也不会自动启定时器。**「立即同步」仍可用；确实需要恢复定时器时，在 Host 显式设 `DSH_CHAT_IMPORT_LEGACY_SYNC=1` 并打开至少一个方向。配置在 `$DSH_HOME/dsh-chat-import/sync.json`。
 - 在 rc.8 上，出站同步先比较轻量的 `sessionPersistence.listSnapshots()` revision，再决定是否读取日志：未变化会话零完整读取；首次迁移 / 变化会话默认每轮最多处理 **25 个**（面板可配 1–500），`outbound.json` 每轮只原子提交一次。
 
 <details>
@@ -117,6 +140,16 @@ import_claude({ path: "~/.claude/projects" })
 ---
 
 ## 🛠 使用
+
+### 项目会话共享（默认）
+
+`project_sessions_list` 只读取元数据，查找当前项目的 Codex / Claude Code / DSH 会话，返回结果不含文件系统路径。每条结果都有短时不透明 `locator`。把选中的 locator 交给 `project_session_read`；可用 `query`、`messageLimit`、`charLimit` 继续缩小片段。被选文件用有界内存流式处理，返回文本另有独立上限。
+
+这是“交接”而不是语义合并：DSH 获得足以理解未完任务的最近或关键词命中的 user/assistant 上下文，然后在当前 DSH 会话里继续。这两个工具不会把修改或新消息写回源会话。
+
+首版共享 reader 支持 **Codex、Claude Code 和 DSH**。其他旧版格式暂时仍只支持导入，直到它们拥有独立的安全 reader。
+
+### 旧版导入
 
 > **注意**：导入会即时落盘，但 DSH 的会话列表不会自动刷新——导入后请刷新页面（或会话列表）才能看到新会话。
 
@@ -222,13 +255,17 @@ DSH rc.8 没有「设置」按钮之后的受支持 Slot，因此安全回退方
 
 两个可选钩子在 DSH 会话启动时运行（host `agent/session-start` 事件），均为 agent 级作用域、绝不触碰你的 transcript：
 
-- **迁移提示（默认开）**——当会话工作区存在可发现的（已导入或可导入）外部聊天历史时，注入一行 `PromptContext`，告诉模型如何继续（`/import <source> <path>` 命令或侧边栏面板）。per-project 记忆保证同一工作区只提示一次；设 `DSH_IMPORT_SESSION_HINT=0` 关闭。
+- **项目共享提示（默认开）**——只注入一条很小的 `PromptContext`，告诉模型优先用 `project_sessions_list` + `project_session_read`，不要默认导入完整历史。会话启动时不执行发现、不读源文件、不写 registry。设 `DSH_PROJECT_SESSION_HINT=0` 关闭；旧开关 `DSH_IMPORT_SESSION_HINT=0` 仍作为兼容别名。
 - **Claude 上下文桥接（默认关）**——设 `DSH_IMPORT_CONTEXT_BRIDGE=1` 把 Claude Code 的上下文资产桥进会话：`~/.claude/memory/*.md`（按 `feedback` > `project` > `reference` > `user` 分组、8 KiB 上限、mtime 缓存重读）、项目根 `CLAUDE.md`、以及 `~/.claude/skills/*/SKILL.md`（注册为该 agent 独有的 `claude-<name>` 技能）。
 
 ---
 
 ## 🔑 关键行为
 
+- **默认引用，按需才复制** —— 同项目共享不会创建或 append DSH 会话副本；旧版 `import_*` 工具仍需显式调用。
+- **精确项目边界** —— locator 绑定调用者的规范项目身份；读取前重新校验源 sessionId 与项目。
+- **有界的可重放上下文** —— 只有返回片段进入当前 DSH 日志；外部 transcript 不会被复制。
+- **共享无后台扫描** —— 只有 list/read 工具被调用时才工作；legacy 周期同步必须显式设 `DSH_CHAT_IMPORT_LEGACY_SYNC=1`。
 - **只读导入** — 源转录与数据库绝不改写；导入的 DSH 历史 append-only（既有事件绝不修改）。
 - **幂等 + 增量** — 未变源不重读直接跳过；增长只追加新增轮次；截断检测并上报。
 - **自动归组工作区** — 会话按源 `cwd` 归入对应工作区；`cwd` 在本机不存在时（跨机器迁移 transcript 的常见情况）回退归到**源文件所在目录**的工作区，不会消失在「未分组」里。
@@ -257,7 +294,8 @@ lib/
 ├── toolkit.mjs       # makeImportTool 工厂 + IMPORT_SPECS
 ├── panel.mjs         # 浏览器面板 JSON 路由
 ├── command.mjs       # /import 斜杠命令
-├── prompt-hint.mjs   # 会话启动迁移提示（REQ-53）
+├── project-share.mjs # 精确项目 locator + 按需有界 reader
+├── prompt-hint.mjs   # 零 I/O 的会话启动共享指引
 └── context-bridge.mjs # Claude memory / CLAUDE.md / skills 桥接（REQ-28）
 ```
 
@@ -265,7 +303,7 @@ lib/
 
 ## ⚙️ 兼容性
 
-面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，实测 `dsh 0.1.0-rc.8`），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 414 个用例。
+面向 `dsh 0.1.x` 线（`dsh-tools >=0.1.0-rc.8 <0.2.0`，源码 / 隔离组合已在 `dsh 0.1.1-rc.2` 检查），需要 **Node.js >= 22.13**（`node:sqlite` 免 flag 的首个版本）。`npm test` — 420 个用例。
 
 ---
 

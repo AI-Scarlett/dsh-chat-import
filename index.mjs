@@ -1,8 +1,8 @@
 // index.mjs — dsh-chat-import 插件入口（薄组合层）
 //
-// 外部聊天记录（Claude Code / Codex-ChatGPT / ChatGPT / Cursor / Gemini / Reasonix /
-// Pi Coding Agent / opencode / zcode / grokbuild / openclaw / hermes / kimi）→ DSH 会话
-// 导入器 + DSH → Claude Code JSONL 反向导出。消费 host 的 sessionPersistence / fs /
+// 同项目 Codex / Claude Code / DSH 会话元数据发现 + 按需有界读取（默认路径）；
+// 保留外部聊天记录 → DSH 会话导入器 + DSH → Claude Code JSONL 反向导出作为
+// legacy 迁移路径。消费 host 的 sessionPersistence / fs /
 // tools / workspaceRegistry 服务（webServer 可选，经 ctx.inject 延迟挂载）。
 //
 // 原单文件实现已按职责拆到 lib/ 下（各模块都消费 ctx，非纯函数；lib/convert/* 保持
@@ -17,9 +17,10 @@
 //   lib/export-tool.mjs     export_claude（REQ-16）执行体
 //   lib/retract.mjs         REQ-33 导入识别 / 撤回（list_imported_sessions / retract_import）
 //   lib/discovery-host.mjs  REQ-25/40 scan_discover 的 host 适配（fs + SQLite 摘要）
+//   lib/project-share.mjs   同项目会话列表 + 不透明 locator + 按需有界 reader
 //   lib/panel.mjs           REQ-41 面板路由（POST /api-import/sessions + /api-import/import）
-//   lib/tools.mjs           21 个工具的注册（15 导入 + import_agents + export +
-//                           sync + 识别/撤回 + 发现）
+//   lib/tools.mjs           23 个工具的注册（15 导入 + import_agents + export +
+//                           sync + 识别/撤回 + 发现 + 两个项目共享工具）
 //
 // 本文件只做组装：registerTools 注册工具；webServer 是可选且晚挂载的 host 服务，
 // 面板路由经 ctx.inject(['webServer']) 延迟注册（headless / 无 Web 的 profile 不挂载
@@ -56,13 +57,14 @@ function apply(ctx) {
     registerPanelRoutes(ctx, webCtx.webServer, registryDir)
     registerSyncRoutes(ctx, webCtx.webServer, registryDir)
   })
-  // 双向增量默认同步关闭；打开控制面板开关后才启定时器。
+  // legacy 双向同步默认不启定时器；需 Host 显式设
+  // DSH_CHAT_IMPORT_LEGACY_SYNC=1，并在控制面板打开至少一个方向。
   registerSyncLoop(ctx, registryDir)
   // REQ-42 /import 命令面：commands 同样可选（headless / CLI 会话可能不挂载），
   // 服务可用时注册（不阻塞插件激活）。
   registerImportCommand(ctx)
-  // REQ-53 新会话开始迁移提示：监听 agent/session-start（host 核心事件，非可选服务），
-  // cwd 有可导入/已导入历史时注入提示（per-project 记忆 + env 开关）。
+  // 新会话共享引导：监听 agent/session-start 注入一条 scoped PromptContext。
+  // 启动时零发现 I/O / 零 registry 写；真正扫描只在 project_sessions_list 被调用时发生。
   registerSessionHint(ctx, registryDir)
   // REQ-28 上下文桥接（默认关闭，env DSH_IMPORT_CONTEXT_BRIDGE=1 开启）：Claude 的
   // memory / CLAUDE.md / skills 桥进 agent 的 scoped systemPrompt / skills 注册。

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`dsh-chat-import` 是 DeepSeek Harness 的 Host 插件：把 Claude Code / Codex / ChatGPT 的外部聊天记录 **全保真**导入为**可继续（resume）**的 DSH 会话。DSH 的哲学是 **everything is a plugin**——本仓库只做插件，不碰引擎。改代码前先读 `README.md`（对外契约）与 `test/`（现有行为）。
+`dsh-chat-import` 是 DeepSeek Harness 的 Host 插件：默认在同一项目内按需共享 Codex / Claude Code / DSH 会话的有界上下文，不复制完整 transcript；同时保留外部聊天记录全保真导入为可继续 DSH 会话的 legacy 迁移路径。DSH 的哲学是 **everything is a plugin**——本仓库只做插件，不碰引擎。改代码前先读 `README.md`（对外契约）与 `test/`（现有行为）。
 
 ## 仓库布局：发布面 / 本地工程面
 
@@ -9,7 +9,7 @@
 ```
 index.mjs        插件入口（薄组合层，host 面）：只做组装——registerTools（lib/tools.mjs 注册 15 个
                  导入工具（14 个来源 + import_local_jsonl） + scan_discover + export_claude + sync_to_claude + list_imported_sessions +
-                 retract_import）+ ctx.inject(['webServer']) 延迟挂载面板路由
+                 retract_import + project_sessions_list + project_session_read）+ ctx.inject(['webServer']) 延迟挂载面板路由
                  （POST /api-import/sessions 发现、POST /api-import/import 面板导入、
                  GET/POST /api-import/sync 双向增量控制台）
 lib/             导入/同步驱动（按职责拆分，均消费 ctx、非纯函数）：imports.mjs（幂等 registry）、
@@ -19,14 +19,15 @@ lib/             导入/同步驱动（按职责拆分，均消费 ctx、非纯�
                  （chatgpt / grokbuild / hermes / kimi 编排 + opencode / zcode 等 dry-run 预览）、toolkit.mjs
                  （makeImportTool 工厂 + IMPORT_SPECS）、export-tool.mjs（export_claude 执行体）、
                  retract.mjs（REQ-33 识别/撤回）、discovery-host.mjs（scan_discover host 适配）、
+                 project-share.mjs（同项目元数据列表 / 内存 locator / 有界流式 reader）、
                  panel.mjs（REQ-41 面板路由）、sync-config.mjs / sync-loop.mjs / sync-panel.mjs
                  （双向增量：入站巡检 + DSH→Claude/Codex/Grok 写出 + 控制台路由）、
                  client.js（Browser 侧 bundle，REQ-41：settings.section
                  槽 → 按工作区分组的面板 + 单选/多选导入；文案注册到 "chat-import" ns 经
                  @deepseek-ai/dsh-client-locale 随 web 语言切换，缺失时降级内置 zh）、command.mjs
                  （REQ-42 /import 命令面：commands 可选服务延迟注册，复用 importDiscoveryItem）、
-                 prompt-hint.mjs（REQ-53 迁移提示：agent/session-start 注入 scoped PromptContext，
-                 per-project 记忆 + env 开关）、context-bridge.mjs（REQ-28 上下文桥接：Claude 的
+                 prompt-hint.mjs（agent/session-start 注入零 I/O 的 scoped 项目共享引导）、
+                 context-bridge.mjs（REQ-28 上下文桥接：Claude 的
                  memory/CLAUDE.md/skills 桥进 scoped systemPrompt/skills，默认关 env 开关）、opencode.mjs / zcode.mjs / hermes.mjs
                  （SQLite 读取，node:sqlite）、convert/（转换核心按源拆分）、export/（反向序列化按目标
                  格式拆分：claude.mjs / codex.mjs / grokbuild.mjs）
@@ -44,7 +45,7 @@ test/            convert 单测 + export 单测 + index mock 集成 + zcode 自�
 dev/             ❌ 本地工程面（gitignore，永不提交）：bin/（脚本：session.mjs 多会话认领 CLI、verify-*、totp）、hooks/（pre-push）、research/（竞品/方向调研）、HANDOFF.md、REQUIREMENTS.md、GROWTH.md、RELEASING.md、ORCHESTRATOR-PROMPT.md、TESTER-PROMPT.md、gh-pat.txt（凭据勿提交）；多会话协调靠 dsh-file-claim 插件
 ```
 
-- `package.json` 的 `files` 白名单就是 npm 发布面：`index.mjs`、`convert.mjs`、`export.mjs`、`lib/imports.mjs`、`lib/backfill.mjs`、`lib/client.js`、`lib/command.mjs`、`lib/context-bridge.mjs`、`lib/discovery.mjs`、`lib/budget.mjs`、`lib/import-core.mjs`、`lib/import-variants.mjs`、`lib/toolkit.mjs`、`lib/export-tool.mjs`、`lib/prompt-hint.mjs`、`lib/retract.mjs`、`lib/discovery-host.mjs`、`lib/panel.mjs`、`lib/sync-config.mjs`、`lib/sync-loop.mjs`、`lib/sync-panel.mjs`、`lib/tools.mjs`、`lib/dsh.mjs`、`lib/convert`、`lib/export`、`lib/hermes.mjs`、`lib/opencode.mjs`、`lib/zcode.mjs`、`cordis.patch.yml`、`README.md`、`README.zh-CN.md`、`CHANGELOG.md`、`assets/import.svg`、`LICENSE`。新增被 `index.mjs` import 或 README 引用的文件必须同步加进 `files`。
+- `package.json` 的 `files` 白名单就是 npm 发布面：`index.mjs`、`convert.mjs`、`export.mjs`、`lib/imports.mjs`、`lib/backfill.mjs`、`lib/client.js`、`lib/command.mjs`、`lib/context-bridge.mjs`、`lib/discovery.mjs`、`lib/budget.mjs`、`lib/import-core.mjs`、`lib/import-variants.mjs`、`lib/toolkit.mjs`、`lib/export-tool.mjs`、`lib/prompt-hint.mjs`、`lib/project-share.mjs`、`lib/retract.mjs`、`lib/discovery-host.mjs`、`lib/panel.mjs`、`lib/sync-config.mjs`、`lib/sync-loop.mjs`、`lib/sync-panel.mjs`、`lib/tools.mjs`、`lib/dsh.mjs`、`lib/convert`、`lib/export`、`lib/hermes.mjs`、`lib/opencode.mjs`、`lib/zcode.mjs`、`cordis.patch.yml`、`README.md`、`README.zh-CN.md`、`CHANGELOG.md`、`assets/import.svg`、`LICENSE`。新增被 `index.mjs` import 或 README 引用的文件必须同步加进 `files`。
 - **永不提交**：`dev/`、`node_modules/`、`.prev-session*.jsonl`、`.dsh-file-claim/`（插件运行时目录）、真实用户 transcript（含敏感内容）、任何凭据/密钥。
 
 ## 命令
@@ -54,7 +55,7 @@ npm test        # node --test 跑 test/*.test.mjs（convert 单测 + export 单�
 npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/check-linux-compat.mjs，CI 同款护栏）
 ```
 
-无构建步骤：纯 ESM，`index.mjs` / `convert.mjs` / `export.mjs` / `lib/` 即发布产物（`lib/client.js` 是手写 CJS bundle，亦无构建）。DSH 手工验证：`dsh plugin --profile web add -w link:<本仓库路径>` 后重启 dsh，在会话里调任一 `import_*`（15 个）/ `scan_discover` / `export_claude` / `sync_to_claude` / `list_imported_sessions` / `retract_import`；Browser 侧验证：dsh web「设置」中的「导入会话」分区 → 按工作区分组浏览 + 单选/多选导入。
+无构建步骤：纯 ESM，`index.mjs` / `convert.mjs` / `export.mjs` / `lib/` 即发布产物（`lib/client.js` 是手写 CJS bundle，亦无构建）。DSH 手工验证：`dsh plugin --profile web add -w link:<本仓库路径>` 后重启 dsh，在与合成 Codex / Claude fixture 相同 cwd 的会话中调 `project_sessions_list` / `project_session_read`，另可调任一 legacy `import_*`（15 个）/ `scan_discover` / `export_claude` / `sync_to_claude` / `list_imported_sessions` / `retract_import`；Browser 侧验证：dsh web「设置」中的「项目会话」分区可见，legacy 导入/同步标识正确。
 
 ## 提交纪律（保持仓库干净）
 
@@ -93,7 +94,7 @@ npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/chec
 
 ## DSH 插件约束
 
-- **只消费 host 公开服务**：`sessionPersistence`（create + append 落盘；list + readFrom 供 `export_claude` / `sync_to_claude` 只读）、`fs`、`tools`、`webServer`（REQ-41 面板 JSON 路由）、`workspaceRegistry`；`agentDefaultModel` / `llm`（REQ-37 预算自适应）可选，经 `ctx.get` 读取、缺失或抛错即回退。opencode / zcode / hermes 用 `node:sqlite`（`DatabaseSync`，host 面）。不发布服务 → 无需 isolate realm。**有 Browser 侧**（REQ-41 使用 rc.8 公开的 `settings.section` 槽：`lib/client.js` 手写 CJS bundle，`package.json` 声明 `dsh.client` + peer `react` / client runtime / settings / locale，`files` 含 `lib/client.js`；面板只消费 host JSON 路由，不 import DSH host 模块）。
+- **只消费 host 公开服务**：`sessionPersistence`（项目共享只用 `listSnapshots` / `inspect`；legacy 导入用 create + append；导出/同步用 list + readFrom）、`fs`（共享必须用 `resolve` 的 targetKey 比较项目，用 `streamText` 有界读取）、`tools`、`webServer`（REQ-41 面板 JSON 路由）、`workspaceRegistry`；`agentDefaultModel` / `llm`（REQ-37 预算自适应）可选，经 `ctx.get` 读取、缺失或抛错即回退。opencode / zcode / hermes 用 `node:sqlite`（`DatabaseSync`，host 面）。不发布服务 → 无需 isolate realm。**有 Browser 侧**（REQ-41 使用 rc.8 公开的 `settings.section` 槽：`lib/client.js` 手写 CJS bundle，`package.json` 声明 `dsh.client` + peer `react` / client runtime / settings / locale，`files` 含 `lib/client.js`；面板只消费 host JSON 路由，不 import DSH host 模块）。
 - **插件，不是引擎改动**：新行为走公开扩展点（工具注册）；绝不修改 DSH 引擎 / apiproxy / 官方 UI 包。
 - **会话日志 append-only、deep-frozen**：只 `create` + `append`，绝不改写历史事件。
 - **模型可见 ⟺ 落盘**：进入模型上下文的任何内容必须能从会话日志重建；新模型可见输入必须对应会话事件。
@@ -105,7 +106,7 @@ npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/chec
 ## 质量约定
 
 - 文件以**恰好一个**换行结尾；空 `catch` 必须说明吞掉什么且 `try` 只包一条语句；不注释代码里显而易见的事实。
-- 保持 `lib/convert/*` 与 `lib/export/*`（含根 shim `convert.mjs` / `export.mjs`）零依赖纯函数：任何 DSH 依赖只允许出现在 `index.mjs` 与 `lib/{imports,backfill,opencode,zcode,hermes,dsh,discovery,budget,import-core,import-variants,toolkit,export-tool,retract,discovery-host,panel,sync-config,sync-loop,sync-panel,tools}.mjs`（即所有消费 ctx 的 host 面模块）。
+- 保持 `lib/convert/*` 与 `lib/export/*`（含根 shim `convert.mjs` / `export.mjs`）零依赖纯函数：任何 DSH 依赖只允许出现在 `index.mjs` 与 `lib/{imports,backfill,opencode,zcode,hermes,dsh,discovery,budget,import-core,import-variants,toolkit,export-tool,retract,discovery-host,project-share,panel,sync-config,sync-loop,sync-panel,tools}.mjs`（即所有消费 ctx 的 host 面模块）。
 - 测试描述行为而非背书正确性；fixtures 用合成数据，永不掺真实 transcript。
 - **跨平台路径纪律（防 CI 红，`npm run check:linux` 护栏）**：CI 在 Linux 跑 `npm test`，测试里的反斜杠合成路径经代码 `node:path` 运算在 posix 下行为不同（`join()` 产混合分隔符、`dirname('D:\…')` 返 `'.'`）。规则：mock 树查找（`stat`/`readText`/`listDir` 读树）必须做分隔符归一（复用 `index.test.mjs` makeCtx 的 `norm` + `lookup` 三态命中）；断言若比较 `node:path` 运算结果，期望值用同口径函数计算，绝不写死 `'X:\…'` 字面量；新增导入测试优先用真实临时目录（`mkdtemp`）。
 - 不写行内文档废话：注释写契约与上下文，不叙述控制流。

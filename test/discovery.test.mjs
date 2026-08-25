@@ -92,6 +92,7 @@ test('claude：注入过滤标题、记录 cwd 项目名、主 transcript 判定
   const a = sessions.find((s) => s.sessionId === 'sess-001')
   assert.equal(a.title, '请帮我修复构建')
   assert.equal(a.project, 'claude-proj') // 记录内 cwd basename（REQ-40 项目名）
+  assert.equal(Object.hasOwn(a, 'projectPath'), false) // 公开发现结果不暴露内部精确路径
   assert.equal(a.importStatus, 'imported')
   assert.equal(a.lastActiveAt, 1786000002000) // 文件 mtime
   assert.equal(a.messageCount, null) // 只读文件头不计数
@@ -99,6 +100,11 @@ test('claude：注入过滤标题、记录 cwd 项目名、主 transcript 判定
   assert.equal(b.title, '真实提问') // 注入首行被过滤
   assert.equal(b.project, 'proj-a') // 无 cwd → 布局 slug 回退
   assert.equal(b.importStatus, 'not-imported')
+
+  const internal = await discoverSessions({
+    path: root, format: 'claude', host, imports, includeProjectPath: true,
+  })
+  assert.equal(internal.sessions.find((s) => s.sessionId === 'sess-001').projectPath, 'D:\\demo\\claude-proj')
 })
 
 test('codex：session_meta 签名、注入过滤标题、项目名（cwd basename / YYYY-MM 回退）', async () => {

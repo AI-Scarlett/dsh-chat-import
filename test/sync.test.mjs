@@ -14,17 +14,22 @@ import {
   DEFAULT_INTERVAL_MS,
   DEFAULT_MAX_SESSIONS_PER_RUN,
 } from '../lib/sync-config.mjs'
-import { runSyncOnce, stopSyncTimer } from '../lib/sync-loop.mjs'
+import { getSyncStatus, runSyncOnce, startSyncTimer, stopSyncTimer } from '../lib/sync-loop.mjs'
 import { registerSyncRoutes } from '../lib/sync-panel.mjs'
 import { clearScanCache } from '../lib/discovery.mjs'
 
+const originalLegacySync = process.env.DSH_CHAT_IMPORT_LEGACY_SYNC
+
 beforeEach(() => {
   process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'dsh-sync-home-'))
+  delete process.env.DSH_CHAT_IMPORT_LEGACY_SYNC
   clearScanCache()
 })
 
 afterEach(() => {
   stopSyncTimer()
+  if (originalLegacySync === undefined) delete process.env.DSH_CHAT_IMPORT_LEGACY_SYNC
+  else process.env.DSH_CHAT_IMPORT_LEGACY_SYNC = originalLegacySync
 })
 
 function ev(type, seq, data, extra = {}) {
@@ -321,4 +326,24 @@ test('/api-import/sync GET 返回默认关闭状态', async () => {
   assert.equal(data.config.inbound.enabled, false)
   assert.equal(data.config.outbound.enabled, false)
   assert.equal(data.config.maxSessionsPerRun, DEFAULT_MAX_SESSIONS_PER_RUN)
+  assert.equal(data.status.legacyAutoSyncAllowed, false)
+})
+
+test('legacy 周期同步即使旧配置已开启也默认不启定时器，环境变量可显式恢复', async () => {
+  const home = process.env.DSH_HOME
+  const { ctx } = makeRealCtx(home)
+  const registryDir = join(home, 'dsh-chat-import')
+  await saveSyncConfig(registryDir, {
+    inbound: { enabled: true, formats: ['claude'] },
+    outbound: { enabled: false, targets: ['codex'] },
+  })
+
+  await startSyncTimer(ctx, registryDir)
+  assert.equal(getSyncStatus().timerActive, false)
+  assert.equal(getSyncStatus().legacyAutoSyncAllowed, false)
+
+  process.env.DSH_CHAT_IMPORT_LEGACY_SYNC = '1'
+  await startSyncTimer(ctx, registryDir)
+  assert.equal(getSyncStatus().timerActive, true)
+  assert.equal(getSyncStatus().legacyAutoSyncAllowed, true)
 })
