@@ -14,7 +14,7 @@ test('manifest, scheduler, snapshots and settings entry declare the rc.8 contrac
     readFile(new URL('README.zh-CN.md', root), 'utf8'),
   ])
   const manifest = JSON.parse(manifestText)
-  assert.equal(manifest.version, '0.3.3')
+  assert.equal(manifest.version, '0.4.0')
   assert.equal(manifest.peerDependencies['@deepseek-ai/dsh-tools'], '>=0.1.0-rc.8 <0.2.0')
   assert.equal(manifest.peerDependencies['@deepseek-ai/dsh-client-runtime'], '>=0.1.0-rc.8 <0.2.0')
   assert.equal(manifest.peerDependencies['@deepseek-ai/dsh-client-ui-settings'], '>=0.1.0-rc.8 <0.2.0')

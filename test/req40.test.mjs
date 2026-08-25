@@ -93,7 +93,7 @@ test('首次扫描落书签（原子写）；同 mtime+size 二次扫描命中�
   // 书签文件：原子写（目录里只有 scan-cache.json，无 .tmp 残留）、按 format 分表、两个源
   assert.deepEqual(readdirSync(cacheDir).sort(), [SCAN_CACHE_FILE])
   const disk = JSON.parse(readFileSync(bmPath, 'utf8'))
-  assert.equal(disk.version, 1)
+  assert.equal(disk.version, 2)
   const claudeTable = disk.bookmarks.claude
   assert.equal(Object.keys(claudeTable).length, 2) // agent-* 辅助 transcript 不建书签
   const bm1 = claudeTable[s1]
@@ -178,7 +178,7 @@ test('书签文件损坏按空书签处理，扫描后重写为合法', async (t
   assert.equal(r.total, 2)
   assert.ok(host.counters.reads > 0) // 损坏 → 按空书签全量重扫
   const disk = JSON.parse(readFileSync(bmPath, 'utf8')) // 扫描后已重写为合法书签
-  assert.equal(disk.version, 1)
+  assert.equal(disk.version, 2)
   assert.ok(disk.bookmarks.claude[s1])
 })
 

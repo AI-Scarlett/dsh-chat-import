@@ -1,7 +1,7 @@
 {
   "name": "dsh-chat-import",
-  "description": "Import Claude Code / Codex / ChatGPT / Cursor / Gemini / Reasonix / Pi Coding Agent / opencode / ZCode / Grok Build / OpenClaw / Hermes / Kimi CLI conversation histories as resumable DeepSeek Harness sessions",
-  "version": "0.3.3",
+  "description": "Share same-project Codex, Claude Code and DSH sessions on demand, with legacy conversation import support",
+  "version": "0.4.0",
   "type": "module",
   "main": "./index.mjs",
   "exports": {
@@ -31,6 +31,7 @@
     "lib/toolkit.mjs",
     "lib/export-tool.mjs",
     "lib/prompt-hint.mjs",
+    "lib/project-share.mjs",
     "lib/retract.mjs",
     "lib/discovery-host.mjs",
     "lib/panel.mjs",
@@ -94,7 +95,8 @@
     "import",
     "jsonl",
     "migration",
-    "transcript"
+    "transcript",
+    "project-sharing"
   ],
   "author": "Nwflower <1679659@qq.com>",
   "contributors": [

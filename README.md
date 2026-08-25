@@ -2,9 +2,9 @@
 
 # 📥 DSH Chat Import
 
-**Import 14 external agent conversation histories into DeepSeek Harness as full-fidelity, resumable sessions — and export / sync back to Claude Code.**
+**Continue the same project across Codex, Claude Code and DSH without copying full conversation histories.**
 
-This public fork ([AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/dsh-chat-import)) adds two-way incremental sync (Claude / Codex / Grok) and a Web control panel. Upstream: [Nwflower/dsh-chat-import](https://github.com/Nwflower/dsh-chat-import).
+The v0.4 primary path is read-only, same-project session sharing with bounded on-demand context. Full import, export and sync remain available as legacy migration tools. This public fork is [AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/dsh-chat-import); upstream: [Nwflower/dsh-chat-import](https://github.com/Nwflower/dsh-chat-import).
 
 [![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](#)
 [![简体中文](https://img.shields.io/badge/Language-简体中文-blue?style=for-the-badge)](README.zh-CN.md)
@@ -23,7 +23,7 @@ This public fork ([AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/d
 
 </div>
 
-> **14 agent sources, one plugin** — full-fidelity import into DeepSeek Harness, seamless resume, and export / sync back to Claude Code.
+> **One project, multiple agents** — finish half a task in Codex, then let DSH read only the relevant handoff and continue it.
 
 <div align="center">
 
@@ -37,7 +37,11 @@ This public fork ([AI-Scarlett/dsh-chat-import](https://github.com/AI-Scarlett/d
 
 ## 💡 Concept
 
-`dsh-chat-import` imports conversation histories from **Claude Code, Codex, ChatGPT, Cursor, Gemini, Reasonix, opencode, ZCode, Grok Build, OpenClaw, Pi Coding Agent, Hermes, Kimi CLI and DSH session logs** — tool calls, reasoning and all — as **full-fidelity, resumable DeepSeek Harness sessions**. Source files are read **read-only** (never rewritten), the DSH engine is never touched, and every import becomes a fresh session grouped into the workspace of its source `cwd`.
+`dsh-chat-import` now treats external histories as **project-scoped references**, not data to copy by default. In a DSH session, `project_sessions_list` uses the current session's canonical `cwd` to find Codex, Claude Code and other DSH sessions for that exact project. `project_session_read` then streams one selected source and returns only a bounded user/assistant excerpt. It excludes reasoning, tool results and injected system context, redacts common credential shapes, and never exposes source paths to the model.
+
+The full transcript is not created as another DSH session. Only the bounded tool result used for the current handoff enters the current DSH log, as required for replayable model context. Locators are opaque, project-bound, process-memory-only and expire after 10 minutes. There is no periodic scan on this path.
+
+The original migration path remains available for cases that really need a durable copy: import histories from **Claude Code, Codex, ChatGPT, Cursor, Gemini, Reasonix, opencode, ZCode, Grok Build, OpenClaw, Pi Coding Agent, Hermes, Kimi CLI and DSH session logs** as full-fidelity DSH sessions. Legacy import sources are read-only and never rewritten.
 
 The reverse direction is covered too: `export_claude` serializes a DSH session back into a Claude Code JSONL transcript that Claude Code can load with `--resume` (read-only — your DSH log is never modified), and `sync_to_claude` incrementally appends a session's new turns back to a Claude Code file — guarded, never silently overwriting.
 
@@ -47,6 +51,10 @@ The reverse direction is covered too: `export_claude` serializes a DSH session b
 
 | Category | Feature | Description |
 | --- | --- | --- |
+| Share | **Exact same-project matching** | Uses the Host filesystem's canonical target identity for the current DSH `cwd`; a matching basename is not enough. |
+| Share | **On-demand, bounded context** | Metadata is listed first; only the chosen session is streamed, capped at 64 MiB scanned / 24 messages / 24,000 returned characters. |
+| Share | **No transcript copy** | The source remains authoritative; DSH persists only the bounded excerpt actually returned to the current model turn. |
+| Share | **Safe handoff surface** | User/assistant text only; tool results, reasoning and injected context are excluded, and common secret patterns are redacted. |
 | Import | **14 sources + local JSONL, one plugin** | One tool per source — from Claude Code JSONL and Codex rollouts to SQLite databases and session directories. |
 | Import | **Full fidelity** | Tool calls & results, thinking blocks, titles, models and timestamps carry over wherever the source records them. |
 | Import | **Batch import** | Point at a directory (or a whole database) and every file / conversation becomes its own session, with a per-file summary. |
@@ -92,19 +100,34 @@ dsh plugin --profile web add dsh-chat-import                    # npm package
 dsh plugin --profile web add -w link:/path/to/dsh-chat-import   # local checkout (symlink)
 ```
 
-**2. Import** — in any DSH session, import a single file or a whole directory (the same call shape works for all 15 import tools — see the table above):
+**2. Continue a project across agents** — open DSH with the same project as the Codex / Claude session, then ask:
+
+```text
+Continue the unfinished Codex task for this project. First inspect the matching project sessions.
+```
+
+DSH can call the two read-only tools directly:
+
+```text
+project_sessions_list({ sources: ["codex", "claude", "dsh"] })
+project_session_read({ locator: "<locator from the list>", messageLimit: 12 })
+```
+
+No path is supplied by the model: both calls are bound to the current DSH session's project.
+
+**3. Optional legacy import** — create a durable full DSH copy only when migration is actually required (the same call shape works for all 15 import tools):
 
 ```
 import_claude({ path: "~/.claude/projects" })
 ```
 
-**3. Resume** — refresh the session list once, open the imported session, and continue chatting — it resumes exactly where the source left off.
+Refresh the session list after a legacy import, open that copied session, and continue chatting.
 
-**4. Two-way incremental sync (local fork)** — the sidebar **Import Sessions** panel now has a **Sync** tab:
+**4. Optional legacy two-way sync** — Settings → **Project Sessions** has a **Legacy Sync** tab:
 
 - **External → DSH**: periodically scan Claude / Codex / Grok for new or grown sessions and import incrementally (same idempotent append state machine).
 - **DSH → External**: write new complete DSH turns back. Imported sessions append to their source file; native DSH sessions get a copy under that agent's default root.
-- Both directions are **off by default**. Turn them on in the panel, or click **Sync now**. Config lives in `$DSH_HOME/dsh-chat-import/sync.json`.
+- **Periodic sync is disabled by default in v0.4 even if an older config still says `enabled: true`.** **Sync now** remains available. To deliberately restore the timer, set `DSH_CHAT_IMPORT_LEGACY_SYNC=1` on the Host and enable a direction. Config lives in `$DSH_HOME/dsh-chat-import/sync.json`.
 - On rc.8, outbound sync compares the lightweight `sessionPersistence.listSnapshots()` revision before reading a log. Unchanged sessions are not loaded; first-run / changed work is bounded to **25 sessions per cycle** by default (configurable from 1–500), and `outbound.json` is committed once per cycle.
 
 <details>
@@ -117,6 +140,16 @@ import_claude({ path: "~/.claude/projects" })
 ---
 
 ## 🛠 Usage
+
+### Project session sharing (default)
+
+`project_sessions_list` performs a metadata-only lookup for the current project's Codex / Claude Code / DSH sessions and returns no filesystem paths. Each result has a short-lived opaque `locator`. Pass only the selected locator to `project_session_read`; optional `query`, `messageLimit` and `charLimit` parameters narrow the excerpt. The selected file is streamed with bounded memory, while the returned text is separately capped.
+
+This is a handoff, not a semantic merge: DSH receives enough recent or query-matching user/assistant context to understand the unfinished task, then continues in the current DSH session. Edits and new messages are not written back to the source session by these two tools.
+
+Initial sharing readers cover **Codex, Claude Code and DSH**. The other legacy formats remain import-only until they have a dedicated safe reader.
+
+### Legacy import
 
 > **Note:** imports persist to disk immediately, but the DSH session list does not auto-refresh — refresh the page (or the session list) after importing to see the new sessions.
 
@@ -222,13 +255,17 @@ The plugin also registers a **`/import <source> <path>`** slash command (availab
 
 Two optional hooks run when a DSH session starts (the host `agent/session-start` event), both agent-scoped and never touching your transcripts:
 
-- **Migration hint (default on)** — when the session's workspace has discoverable external history (already-imported or importable), a one-line `PromptContext` is injected telling the model how to continue (`/import <source> <path>` or the sidebar panel). Per-project memory shows the hint only once per workspace; set `DSH_IMPORT_SESSION_HINT=0` to disable.
+- **Project-sharing hint (default on)** — injects one small `PromptContext` telling the model to prefer `project_sessions_list` + `project_session_read` over a full import. It performs no discovery, source-file read or registry write at session startup. Set `DSH_PROJECT_SESSION_HINT=0` to disable; the old `DSH_IMPORT_SESSION_HINT=0` switch remains an alias.
 - **Claude context bridge (default off)** — set `DSH_IMPORT_CONTEXT_BRIDGE=1` to bridge Claude Code context assets into the session: `~/.claude/memory/*.md` (grouped `feedback` > `project` > `reference` > `user`, 8 KiB cap, re-read via mtime cache), the project-root `CLAUDE.md`, and `~/.claude/skills/*/SKILL.md` (registered as `claude-<name>` skills on this agent only).
 
 ---
 
 ## 🔑 Key behaviors
 
+- **Reference by default, copy only on request** — same-project sharing never creates or appends a DSH session copy; legacy `import_*` tools remain explicit.
+- **Exact project boundary** — locators are bound to the caller's canonical project identity and the source session id/project are revalidated before reading.
+- **Bounded durable context** — only the returned excerpt is logged in the current DSH session; the external transcript is never duplicated.
+- **No background sharing scan** — sharing runs only when its list/read tool is called; legacy periodic sync requires `DSH_CHAT_IMPORT_LEGACY_SYNC=1`.
 - **Read-only import** — source transcripts and databases are never rewritten; imported DSH history is append-only (existing events are never modified).
 - **Idempotent + incremental** — unchanged sources are skipped without re-reading; growth appends only the new turns; truncation is detected and reported.
 - **Auto workspace grouping** — sessions are grouped into the workspace of their source `cwd`; when the `cwd` does not exist on this machine (common when migrating transcripts from another machine), the session falls back to the workspace of the **source file's directory** so it never disappears into "未分组".
@@ -257,7 +294,8 @@ lib/
 ├── toolkit.mjs       # makeImportTool factory + IMPORT_SPECS
 ├── panel.mjs         # browser panel JSON routes
 ├── command.mjs       # /import slash command
-├── prompt-hint.mjs   # session-start migration hint (REQ-53)
+├── project-share.mjs # exact-project locators + bounded on-demand readers
+├── prompt-hint.mjs   # zero-I/O session-start sharing instruction
 └── context-bridge.mjs # Claude memory / CLAUDE.md / skills bridge (REQ-28)
 ```
 
@@ -265,7 +303,7 @@ lib/
 
 ## ⚙️ Compatibility
 
-Targets the `dsh 0.1.x` line (`dsh-tools >=0.1.0-rc.8 <0.2.0`, tested on `dsh 0.1.0-rc.8`) and requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). `npm test` — 414 cases.
+Targets the `dsh 0.1.x` line (`dsh-tools >=0.1.0-rc.8 <0.2.0`, source/disposable composition checked on `dsh 0.1.1-rc.2`) and requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). `npm test` — 420 cases.
 
 ---
 
