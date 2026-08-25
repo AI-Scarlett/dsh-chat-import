@@ -10,6 +10,8 @@ import {
 import { clearScanCache } from '../lib/discovery.mjs'
 
 const j = (value) => JSON.stringify(value)
+const CODEX_SECRET = 'sk-' + 'x'.repeat(24)
+const CLAUDE_SECRET = 'sk-' + 'y'.repeat(24)
 
 function makeFs() {
   const target = async (path) => {
@@ -78,7 +80,7 @@ async function fixture() {
     j({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<environment_context>hidden</environment_context>' }] } }),
     j({ type: 'response_item', payload: { type: 'message', role: 'user', content: [
       { type: 'input_text', text: '<system-reminder>also hidden</system-reminder>' },
-      { type: 'input_text', text: 'Codex 做到一半，请继续修复登录，不要暴露 sk-abcdefghijklmnopqrstuvwxyz' },
+      { type: 'input_text', text: `Codex 做到一半，请继续修复登录，不要暴露 ${CODEX_SECRET}` },
     ] } }),
     j({ type: 'response_item', payload: { type: 'reasoning', summary: [{ text: 'PRIVATE_REASONING' }] } }),
     j({ type: 'response_item', payload: { type: 'function_call_output', output: 'PRIVATE_TOOL_OUTPUT' } }),
@@ -94,7 +96,7 @@ async function fixture() {
   const claudeId = 'claude-project-share'
   const claudePath = join(claudeDir, claudeId + '.jsonl')
   await writeFile(claudePath, [
-    j({ sessionId: claudeId, cwd: project, type: 'user', timestamp: '2026-08-25T02:00:00Z', message: { role: 'user', content: '继续完成 Claude 任务，密钥 sk-claudeabcdefghijklmnopqrstuvwxyz' } }),
+    j({ sessionId: claudeId, cwd: project, type: 'user', timestamp: '2026-08-25T02:00:00Z', message: { role: 'user', content: `继续完成 Claude 任务，密钥 ${CLAUDE_SECRET}` } }),
     j({ sessionId: claudeId, type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '已留下清晰交接。' }, { type: 'tool_use', input: { secret: 'PRIVATE' } }] } }),
     j({ sessionId: claudeId, type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'PRIVATE_CLAUDE_TOOL_OUTPUT' }] } }),
   ].join('\n'))
@@ -150,7 +152,7 @@ test('same-project list returns opaque locators only and excludes other projects
   assert.deepEqual(value.sessions.map((row) => row.source).sort(), ['claude', 'codex', 'dsh'])
   assert.ok(value.sessions.every((row) => /^ps_[^.]+\.[A-Za-z0-9_-]+$/.test(row.locator)))
   assert.ok(value.sessions.every((row) => !('sourcePath' in row) && !('projectPath' in row)))
-  assert.doesNotMatch(value.sessions.map((row) => row.title).join('\n'), /sk-claude/)
+  assert.doesNotMatch(value.sessions.map((row) => row.title).join('\n'), new RegExp(CLAUDE_SECRET))
   validateJsonSchemaValue(definition.output.schema, value)
 })
 
@@ -165,7 +167,7 @@ test('on-demand Codex read is bounded, redacted, and excludes reasoning/tool out
   const text = value.messages.map((message) => message.text).join('\n')
   assert.match(text, /继续修复登录/)
   assert.match(text, /\[REDACTED_SECRET\]/)
-  assert.doesNotMatch(text, /PRIVATE_REASONING|PRIVATE_TOOL_OUTPUT|sk-abcdefghijklmnopqrstuvwxyz/)
+  assert.doesNotMatch(text, new RegExp(`PRIVATE_REASONING|PRIVATE_TOOL_OUTPUT|${CODEX_SECRET}`))
   validateJsonSchemaValue(tool(fx, 'project_session_read').output.schema, value)
 })
 
