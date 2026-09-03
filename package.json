@@ -1,7 +1,7 @@
 {
   "name": "dsh-chat-import",
   "description": "Share same-project Codex, Claude Code and DSH sessions on demand, with legacy conversation import support",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "main": "./index.mjs",
   "exports": {
@@ -59,27 +59,26 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-locale"
       ],
       "platform": "web"
     },
     "compatibility": {
-      "dsh": ">=0.1.0-rc.8 <0.2.0",
+      "dsh": ">=0.1.2-rc.1 <0.2.0",
       "dshReleases": {
         "rc.7": "incompatible",
         "rc.8": "compatible",
         "0.1.1-rc.1": "compatible",
-        "0.1.1-rc.2": "compatible"
+        "0.1.1-rc.2": "compatible",
+        "0.1.2-rc.1": "compatible"
       }
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.8 <0.2.0",
-    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc.8 <0.2.0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.0-rc.8 <0.2.0",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc.8 <0.2.0",
+    "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.2-rc.1 <0.2.0",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.2-rc.1 <0.2.0",
     "react": ">=18.0.0"
   },
   "keywords": [

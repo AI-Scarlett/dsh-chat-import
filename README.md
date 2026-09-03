@@ -303,7 +303,7 @@ lib/
 
 ## ⚙️ Compatibility
 
-The package declares `dsh >=0.1.0-rc.8 <0.2.0` and `dsh-tools >=0.1.0-rc.8 <0.2.0`: `rc.7` is incompatible, while `rc.8`, `0.1.1-rc.1` and `0.1.1-rc.2` are compatible declarations. The `dsh-tools` contract was checked on `dsh 0.1.1-rc.2`. It requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). These are source compatibility declarations; per-release Profile install, startup, uninstall and rollback evidence remains a separate DSH STORE gate. `npm test` — 420 cases.
+The package declares `dsh >=0.1.2-rc.1 <0.2.0` and `dsh-tools >=0.1.2-rc.1 <0.2.0`; `0.1.2-rc.1` is the current compatibility target and older declarations are retained for historical locked sources. The `dsh-tools` contract requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). These are source compatibility declarations; per-release Profile install, startup, uninstall and rollback evidence remains a separate DSH STORE gate. `npm test` — 420 cases.
 
 ---
 
