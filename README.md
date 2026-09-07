@@ -303,7 +303,9 @@ lib/
 
 ## ⚙️ Compatibility
 
-The package declares `dsh >=0.1.2-rc.1 <0.2.0` and `dsh-tools >=0.1.2-rc.1 <0.2.0`; `0.1.2-rc.1` is the current compatibility target and older declarations are retained for historical locked sources. The `dsh-tools` contract requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). These are source compatibility declarations; per-release Profile install, startup, uninstall and rollback evidence remains a separate DSH STORE gate. `npm test` — 420 cases.
+The package declares `dsh >=0.1.2-rc.1 <0.2.0` and `dsh-tools >=0.1.2-rc.1 <0.2.0`; `0.1.3-alpha.1` is an additional explicit compatibility target and older declarations are retained for historical locked sources. The `dsh-tools` contract requires **Node.js >= 22.13** (the first release where `node:sqlite` is available without a flag). These are source compatibility declarations; per-release Profile install, startup, uninstall and rollback evidence remains a separate DSH STORE gate. `npm test` covers legacy and handle persistence.
+
+Version 0.4.2 supports the public per-session handle API: imports append and flush before closing ownership, reads always close their handles, and busy writers fail without bypassing the host. Synthesized imported replies use format 2 with an empty stream (no invented live chunks); this adapter has no dependency on the unpublished official migration package. Same-project sharing checks canonical project identity before reading, pages within event/byte bounds, and excludes reasoning blocks from shared text. Official source-host checks cover import, duplicate detection and incremental append; browser interaction and real Profile acceptance remain separate.
 
 ---
 
