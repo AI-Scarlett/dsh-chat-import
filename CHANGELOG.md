@@ -11,6 +11,11 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
 
 ## [Unreleased]
 
+### Fixed
+
+- 0.4.2: adapt session reads and durable import writes to DSH 0.1.3-alpha.1 handles; emit self-contained synthesized format 2 imports and preserve legacy hosts. Close handles on failures and retain single-writer ownership errors.
+- Enforce project identity before reading shared DSH logs and exclude reasoning blocks from shared text.
+
 ### Added
 
 - **Same-project session sharing (0.4.0)** — two read-only model tools replace

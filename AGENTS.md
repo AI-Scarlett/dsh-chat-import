@@ -98,7 +98,7 @@ npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/chec
 - **插件，不是引擎改动**：新行为走公开扩展点（工具注册）；绝不修改 DSH 引擎 / apiproxy / 官方 UI 包。
 - **会话日志 append-only、deep-frozen**：只 `create` + `append`，绝不改写历史事件。
 - **模型可见 ⟺ 落盘**：进入模型上下文的任何内容必须能从会话日志重建；新模型可见输入必须对应会话事件。
-- **事件纪律**：`seq` 从 0 连续；surface 事件（`user/message` / `assistant/message` / `tool/result`）必须带 `surfaceOp: 'append'`；`tool/result` 用 `sourceEventSeqs` 关联其 `tool/call`；`SessionHeader` version 保持 `0`，只做结构性变更才 bump。
+- **事件纪律**：`seq` 从 0 连续；surface 事件（`user/message` / `assistant/message` / `tool/result`）必须带 `surfaceOp: 'append'`；`tool/result` 用 `sourceEventSeqs` 关联其 `tool/call`；纯转换器的 `SessionHeader` version 保持 `0`；`lib/persistence.mjs` 仅在句柄宿主边界把合成导入转换成格式 `2`，不得改写已有历史事件。
 - **幂等**：目标会话已存在时跳过（`sessionPersistence.list()` 判重），不重复写入。
 - **归组**：`workspaceRegistry.resolveByPath(cwd)` → `workspace.attachSession(id)`，否则会话显示「未分组」。
 - **失败要大声**：畸形 JSONL 行计数上报（`skipped`），绝不静默吞掉；读取工作区外的 transcript 需会话沙箱允许。
@@ -106,7 +106,7 @@ npm run check:linux   # 跨平台路径纪律静态检查（.github/scripts/chec
 ## 质量约定
 
 - 文件以**恰好一个**换行结尾；空 `catch` 必须说明吞掉什么且 `try` 只包一条语句；不注释代码里显而易见的事实。
-- 保持 `lib/convert/*` 与 `lib/export/*`（含根 shim `convert.mjs` / `export.mjs`）零依赖纯函数：任何 DSH 依赖只允许出现在 `index.mjs` 与 `lib/{imports,backfill,opencode,zcode,hermes,dsh,discovery,budget,import-core,import-variants,toolkit,export-tool,retract,discovery-host,project-share,panel,sync-config,sync-loop,sync-panel,tools}.mjs`（即所有消费 ctx 的 host 面模块）。
+- 保持 `lib/convert/*` 与 `lib/export/*`（含根 shim `convert.mjs` / `export.mjs`）零依赖纯函数：任何 DSH 依赖只允许出现在 `index.mjs` 与 `lib/{persistence,imports,backfill,opencode,zcode,hermes,dsh,discovery,budget,import-core,import-variants,toolkit,export-tool,retract,discovery-host,project-share,panel,sync-config,sync-loop,sync-panel,tools}.mjs`（即所有消费 ctx 的 host 面模块）。
 - 测试描述行为而非背书正确性；fixtures 用合成数据，永不掺真实 transcript。
 - **跨平台路径纪律（防 CI 红，`npm run check:linux` 护栏）**：CI 在 Linux 跑 `npm test`，测试里的反斜杠合成路径经代码 `node:path` 运算在 posix 下行为不同（`join()` 产混合分隔符、`dirname('D:\…')` 返 `'.'`）。规则：mock 树查找（`stat`/`readText`/`listDir` 读树）必须做分隔符归一（复用 `index.test.mjs` makeCtx 的 `norm` + `lookup` 三态命中）；断言若比较 `node:path` 运算结果，期望值用同口径函数计算，绝不写死 `'X:\…'` 字面量；新增导入测试优先用真实临时目录（`mkdtemp`）。
 - 不写行内文档废话：注释写契约与上下文，不叙述控制流。
