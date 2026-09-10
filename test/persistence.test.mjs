@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { convertClaudeJsonl } from '../convert.mjs'
+import { convertDshJsonl } from '../lib/convert/dsh.mjs'
 import { persistenceFor, persistSession, prepareSessionForHost } from '../lib/persistence.mjs'
 import { readSharedSession } from '../lib/project-share.mjs'
 
@@ -79,11 +80,15 @@ test('project sharing pages a v2 log through a read handle and omits reasoning',
   assert.equal(closed, true)
 })
 
-test('synthesized v2 imports match the official migration including tool references', async t => {
+test('synthesized imports are upgraded to V3 with tool references', async t => {
   let catalog
   try { catalog = (await import('@deepseek-ai/dsh-session-format-catalog')).sessionFormatCatalog } catch (error) {
     if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error
     t.skip('optional official format catalog is absent in this test installation'); return
+  }
+  if (catalog.currentVersion < 3) {
+    t.skip('the optional official format catalog is older than the DSH 0.1.5 V3 target')
+    return
   }
   for (const name of ['sess-simple-001.jsonl', 'sess-tool-001.jsonl', 'sess-multi-001.jsonl']) {
     const converted = convertClaudeJsonl(await readFile(new URL(`fixtures/${name}`, import.meta.url), 'utf8'), {})
@@ -110,13 +115,32 @@ test('synthesized v2 imports match the official migration including tool referen
   }
 })
 
-test('v2 synthesis is self-contained and refuses unsynthesized history', async () => {
+test('V3 synthesis is self-contained and refuses unsynthesized history', async () => {
   const converted = convertClaudeJsonl(await readFile(new URL('fixtures/sess-simple-001.jsonl', import.meta.url), 'utf8'), {})
   const ctx = { sessionPersistence: { open() {} } }
   const result = await prepareSessionForHost(ctx, converted)
-  assert.equal(result.meta.version, 2)
+  assert.equal(result.meta.version, 3)
+  assert.equal(result.events.find(event => event.type === 'system/message').data.message.source.plugin, '@deepseek-ai/dsh-system-prompt')
   assert.deepEqual(result.events.find(event => event.type === 'assistant/message').data.stream, [])
   assert.equal(result.meta.sourceId, undefined)
   assert.equal(await prepareSessionForHost({ sessionPersistence: {} }, converted), converted)
   await assert.rejects(prepareSessionForHost(ctx, { ...converted, events: [{ seq: 0, type: 'assistant/chunk' }] }), /Unsupported synthesized/)
+})
+
+test('native DSH V3 import preserves its system history and assistant stream', async () => {
+  const raw = [
+    { type: 'session', version: 3, id: 'native-v3', createdAt: 1, cwd: '/synthetic-project' },
+    { type: 'turn/start', data: { turn: 1 } },
+    { type: 'step/start', data: { turn: 1, step: 1 } },
+    { type: 'system/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { id: 'sys', role: 'system', content: [], source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt' } } } },
+    { type: 'user/message', surfaceOp: 'append', data: { id: 'u', role: 'user', content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } } },
+    { type: 'assistant/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { id: 'a', role: 'assistant', content: [{ type: 'text', text: 'world' }], source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, stream: [{ type: 'chunk' }] } },
+    { type: 'step/end', data: { turn: 1, step: 1 } },
+    { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+  ].map(row => JSON.stringify(row)).join('\n')
+  const converted = convertDshJsonl(raw, { sourcePath: '/synthetic-project/session.jsonl' })
+  const prepared = await prepareSessionForHost({ sessionPersistence: { open() {} } }, converted)
+  assert.equal(prepared.meta.version, 3)
+  assert.equal(prepared.events.filter(event => event.type === 'system/message').length, 1)
+  assert.deepEqual(prepared.events.find(event => event.type === 'assistant/message').data.stream, [{ type: 'chunk' }])
 })

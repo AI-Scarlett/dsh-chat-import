@@ -13,6 +13,10 @@ Release dates are the npm publish timestamps in Asia/Shanghai (UTC+8).
 
 ### Fixed
 
+- **DSH 0.1.5-alpha.2 compatibility (0.4.3)** — preserve native Session V3 system messages, assistant streams, physical JSONL row references and replacement operations when importing DSH logs; synthesized imports are upgraded to a valid V3 head.
+
+### Fixed
+
 - 0.4.2: adapt session reads and durable import writes to DSH 0.1.3-alpha.1 handles; emit self-contained synthesized format 2 imports and preserve legacy hosts. Close handles on failures and retain single-writer ownership errors.
 - Enforce project identity before reading shared DSH logs and exclude reasoning blocks from shared text.
 
