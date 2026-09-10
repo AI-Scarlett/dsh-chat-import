@@ -33,6 +33,31 @@ test('convertDshJsonl 保留核心事件并重排 seq', () => {
   assert.deepEqual(out.events.slice(1, 3).map((e) => e.type), ['turn/start', 'step/start'])
 })
 
+test('convertDshJsonl 读取 DSH V3 物理行日志并保留 system、stream 与引用', () => {
+  const rows = [
+    { type: 'session', version: 3, id: 'v3-session', cwd: '/tmp/proj', createdAt: 1700000000000 },
+    { type: 'permission/preset', data: { preset: 'danger-full-access' } },
+    { type: 'turn/start', data: { turn: 1 } },
+    { type: 'step/start', data: { turn: 1, step: 1 } },
+    { type: 'system/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { id: 'sys-1', role: 'system', content: [], source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt' } } } },
+    { type: 'user/message', surfaceOp: 'append', data: { id: 'u-1', role: 'user', content: [{ type: 'text', text: '你好' }], source: { kind: 'user' } } },
+    { type: 'request/header', data: { header: { config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } } } },
+    { type: 'assistant/message', surfaceOp: 'append', data: { turn: 1, step: 1, message: { id: 'a-1', role: 'assistant', content: [{ type: 'tool-call', id: 'call-1', name: 'read', arguments: '{}' }], source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, stream: [{ type: 'chunk', chunk: { type: 'block-end', block: { type: 'tool-call', id: 'call-1', name: 'read', arguments: '{}' } } }] } },
+    { type: 'tool/call', data: { turn: 1, step: 1, callId: 'call-1', name: 'read', arguments: '{}' } },
+    { type: 'tool/result', surfaceOp: 'append', sourceEventSeqs: [7], data: { turn: 1, step: 1, message: { id: 't-1', role: 'user', content: [{ type: 'tool-result', toolCallId: 'call-1', content: [] }], source: { kind: 'tool', callId: 'call-1' } } } },
+    { type: 'session/title', data: { title: 'V3 标题', messageSeqs: [5] } },
+  ]
+  const out = convertDshJsonl(rows.map(row => JSON.stringify(row)).join('\n'), { sourcePath: '/tmp/proj/session.jsonl' })
+  assert.equal(out.meta.version, 0)
+  assert.equal(out.meta.sourceFormatVersion, 3)
+  assert.equal(out.events.find(event => event.type === 'system/message').data.message.id, 'sys-1')
+  const assistant = out.events.find(event => event.type === 'assistant/message')
+  assert.equal(assistant.data.stream.length, 1)
+  const result = out.events.find(event => event.type === 'tool/result')
+  assert.deepEqual(result.sourceEventSeqs, [assistant.seq])
+  assert.deepEqual(out.events.find(event => event.type === 'session/title').data.messageSeqs, [out.events.find(event => event.type === 'user/message').seq])
+})
+
 test('discoverSessions format=dsh 发现 session.jsonl 会话', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-import-test-'))
   const dir = join(root, 'sessions', 'encoded', 'session-dsh-test')
